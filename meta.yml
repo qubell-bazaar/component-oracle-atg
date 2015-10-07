@@ -1,0 +1,24 @@
+kit:
+  name: "Oracle ATG Commerce Reference Store"
+  link: https://github.com/qubell-bazaar/component-oracle-atg
+  applications:
+    - name: "ATG"
+      manifest: https://raw.github.com/qubell-bazaar/component-oracle-atg/1.0-43p/component-oracle-atg.yml
+    - name: "WebLogic"
+      manifest: https://raw.github.com/qubell-bazaar/component-oracle-weblogic/2.0-43p/component-oracle-weblogic.yml
+    - name: "Oracle DB"
+      manifest: https://raw.github.com/qubell-bazaar/component-oracle-db/1.0-43p/component-oracle-db.yml
+  provider:
+    name: "Tonomi"
+    link: http://www.tonomi.com
+  documentation:
+    overview: |
+      Pre-requisites:
+        - AWS account
+        - CentOS 6 x86_64
+        - Installation files from Oracle:
+          - Database 11R2
+          - WebLogic 12.1.2
+          - Endeca GuidedSearch 11.1
+          - ATG 11.1
+          - ATG CRS 11.1
