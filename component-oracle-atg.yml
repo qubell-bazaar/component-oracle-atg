@@ -1,0 +1,423 @@
+application:
+  configuration:
+    input.recipe-url: "https://qubell-starter-kit-artifacts.s3.amazonaws.com/qubell-bazaar/component-oracle-atg-cookbooks-stable-99999.tar.gz"
+    input.atg-password: "123QweAsd"
+    input.atg-artifact-production: ""
+    input.atg-artifact-publishing: ""
+  interfaces:
+    input:
+      recipe-url: bind(endeca#input.recipe-url, atg#input.recipe-url)
+      atg-password: bind(atg#input.atg-password)
+      atg-artifact-production: bind(atg#input.atg-artifact-production)
+      atg-artifact-publishing: bind(atg#input.atg-artifact-publishing)
+    atg:
+      url: bind(atg#result.atg_store_url)
+      bcc: bind(atg#result.bcc_url)
+      dynadmin: bind(atg#result.dynadmin_url)
+      endeca: bind(atg#result.endeca_url)
+  bindings:
+    - [ endeca#props, environment ]
+    - [ endeca#weblogic, weblogic ]
+    - [ atg#props, environment ]
+    - [ atg#weblogic, weblogic ]
+    - [ atg#endeca, endeca ]
+    - [ atg#oracledb, database ]
+  components:
+    environment:
+      type: reference.Service
+      interfaces:
+        properties:
+          oracle_endeca_install: publish-signal(map<string, object>)
+          oracle_atg_install: publish-signal(map<string, object>)
+          
+    atg:
+      type: workflow.Instance
+      interfaces:
+        input:
+          recipe-url: configuration(string)
+          atg-password: configuration(string)
+          atg-artifact-production: configuration(string)
+          atg-artifact-publishing: configuration(string)
+        props:
+          oracle_atg_install: consume-signal(map<string, object>)
+        weblogic:
+          wl-host: consume-signal(string)
+          wl-image: consume-signal(map<string,object>)
+          wl-jattrs: consume-signal(map<string,object>)
+          deploy: send-command(list<map<string, object>> artifacts)
+        endeca:
+          endeca-installed: consume-signal(string)
+        oracledb:
+          db-host: consume-signal(string)
+          db-port: consume-signal(int)
+          db-sid: consume-signal(string)
+          create-user: send-command(map<string, object> creds => map<string, object> creds)
+          delete-user: send-command(map<string, object> creds)
+          file-query: send-command(map<string, object> creds, list<string> url)
+          sql-query: send-command(map<string, object> creds, list<string> code)
+          impdp: send-command(string dmp-url, string dmp-params)
+        result:
+          atg_creds:
+            type: publish-signal(map<string, object>)
+            name: Publishing DataSource creds
+          atgprod_creds:
+            type: publish-signal(map<string, object>)
+            name: Production DataSource creds
+          switcha_creds:
+            type: publish-signal(map<string, object>)
+            name: SwitchA DataSource creds
+          switchb_creds:
+            type: publish-signal(map<string, object>)
+            name: SwitchB DataSource creds
+          atg_store_url:
+            type: publish-signal(string)
+            name: Reference Store URL
+          bcc_url:
+            type: publish-signal(string)
+            name: BCC URL (admin)
+          dynadmin_url:
+            type: publish-signal(string)
+            name: Dynamo admin. URL (admin)
+          endeca_url:
+            type: publish-signal(string)
+            name: Endeca workbench (admin)
+
+      required: [ props, weblogic, endeca, oracledb ]
+      configuration:
+        configuration.triggers:
+          input.atg-artifact-production: deploy-production
+          input.atg-artifact-publishing: deploy-publishing
+        configuration.workflows:
+          launch:
+            steps:
+              - getSignals:
+                  action: getSignals
+                  phase: prepare
+                  output:
+                    env: result
+              - getInstanceContext:
+                  action: getInstanceContext
+                  phase: prepare
+                  output:
+                    instanceId: instanceId
+              - provision:
+                  action: provisionVms
+                  precedingPhases: [ prepare ]
+                  parameters:
+                    hardwareId: ""
+                    staticIps: [ "{$.env.weblogic.wl-host}" ]
+                    vmIdentity: "{$.env.weblogic.wl-image.user}"
+                    roleName: default
+              - installAtg:
+                  action: chefsolo
+                  precedingPhases: [ provision ]
+                  parameters:
+                    roles: [ default ]
+                    recipeUrl: "{$.recipe-url}"
+                    runList:
+                      - recipe[atg::install_crs]
+                      - recipe[atg::deploy_endeca_crs]
+                    jattrs:
+                      weblogic: "{$.env.weblogic.wl-jattrs}"
+                      atg:
+                        install: "{$.env.props.oracle_atg_install}"
+              - createUser0:
+                  action: oracledb.create-user
+                  phase: create-user
+                  precedingPhases: [ installAtg ]
+                  parameters:
+                    creds:
+                      username: "atg_{$.instanceId}"
+                      grants:
+                        - CREATE VIEW
+                        - EXECUTE ON SYS.DBMS_CRYPTO
+                    commandCallTimeout: 600
+                  output:
+                    atg_creds: creds
+              - createUser1:
+                  action: oracledb.create-user
+                  phase: create-user
+                  precedingPhases: [ installAtg ]
+                  parameters:
+                    creds:
+                      username: "atgprod_{$.instanceId}"
+                      grants:
+                        - CREATE VIEW
+                        - EXECUTE ON SYS.DBMS_CRYPTO
+                    commandCallTimeout: 600
+                  output:
+                    atgprod_creds: creds
+              - createUser2:
+                  action: oracledb.create-user
+                  phase: create-user
+                  precedingPhases: [ installAtg ]
+                  parameters:
+                    creds:
+                      username: "switcha_{$.instanceId}"
+                    commandCallTimeout: 600
+                  output:
+                    switcha_creds: creds
+              - createUser3:
+                  action: oracledb.create-user
+                  phase: create-user
+                  precedingPhases: [ installAtg ]
+                  parameters:
+                    creds:
+                      username: "switchb_{$.instanceId}"
+                    commandCallTimeout: 600
+                  output:
+                    switchb_creds: creds
+              - importDatabase:
+                  action: oracledb.impdp
+                  precedingPhases: [ create-user ]
+                  parameters:
+                    dmp-url: "https://oracle-distribution.s3.amazonaws.com/atg/atg_11.1/atg_crs.dmp.gz"
+                    dmp-params: !
+                      remap_schema=atg_pub:{$.atg_creds.username}
+                      remap_schema=atg_prod:{$.atgprod_creds.username}
+                      remap_schema=switcha:{$.switcha_creds.username}
+                      remap_schema=switchb:{$.switchb_creds.username}
+                    commandCallTimeout: 600
+              - fixPasswords0:
+                  action: oracledb.sql-query
+                  phase: fixPasswords
+                  precedingPhases: [ importDatabase ]
+                  parameters:
+                    commandCallTimeout: 600
+                    creds: "{$.atgprod_creds}"
+                    code:
+                      - !
+                         UPDATE DAS_ACCOUNT
+                         SET PASSWORD=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW('{$.atg-password}'), 2))),
+                         PASSWORD_KDF=4
+                         WHERE
+                         ACCOUNT_NAME='admin';
+              - fixPasswords1:
+                  action: oracledb.sql-query
+                  phase: fixPasswords
+                  precedingPhases: [ importDatabase ]
+                  parameters:
+                    commandCallTimeout: 600
+                    creds: "{$.atg_creds}"
+                    code:
+                      - !
+                         UPDATE DAS_ACCOUNT
+                         SET PASSWORD=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW('{$.atg-password}'), 2))),
+                         PASSWORD_KDF=4
+                         WHERE
+                         ACCOUNT_NAME='admin';
+                      - !
+                         UPDATE DPI_USER
+                         SET PASSWORD=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW('{$.atg-password}'), 2))),
+                         PASSWORD_KDF=4,
+                         PASSWORD_SALT=''
+                         WHERE
+                         LOGIN='admin';
+                      - !
+                         UPDATE DPI_USER
+                         SET PASSWORD=LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW('{$.atg-password}'), 2))),
+                         PASSWORD_KDF=4,
+                         PASSWORD_SALT=''
+                         WHERE
+                         LOGIN='merchandise';
+                        
+              - configureAtg:
+                  action: chefsolo
+                  precedingPhases: [ create-user ]
+                  parameters:
+                    roles: [ default ]
+                    recipeUrl: "{$.recipe-url}"
+                    runList:
+                      - recipe[atg::create_infrastructure]
+                      - recipe[atg::assemble_production_ear]
+                      - recipe[atg::assemble_publishing_ear]
+                    jattrs:
+                      atg:
+                        servers:
+                          production:
+                            machine: "{$.env.weblogic.wl-host}"
+                          publishing:
+                            machine: "{$.env.weblogic.wl-host}"
+                        datasources:
+                          production:
+                            username: "{$.atgprod_creds.username}"
+                            password: "{$.atgprod_creds.password}"
+                            jdbc_url: "jdbc:oracle:thin:@{$.env.oracledb.db-host}:{$.env.oracledb.db-port}:{$.env.oracledb.db-sid}"
+                          publishing:
+                            username: "{$.atg_creds.username}"
+                            password: "{$.atg_creds.password}"
+                            jdbc_url: "jdbc:oracle:thin:@{$.env.oracledb.db-host}:{$.env.oracledb.db-port}:{$.env.oracledb.db-sid}"
+                          switcha:
+                            username: "{$.switcha_creds.username}"
+                            password: "{$.switcha_creds.password}"
+                            jdbc_url: "jdbc:oracle:thin:@{$.env.oracledb.db-host}:{$.env.oracledb.db-port}:{$.env.oracledb.db-sid}"
+                          switchb:
+                            username: "{$.switchb_creds.username}"
+                            password: "{$.switchb_creds.password}"
+                            jdbc_url: "jdbc:oracle:thin:@{$.env.oracledb.db-host}:{$.env.oracledb.db-port}:{$.env.oracledb.db-sid}"
+                  output:
+                    chefAttrs: chefState
+              - deployAtg:
+                  action: weblogic.deploy
+                  precedingPhases: [ importDatabase, configureAtg, fixPasswords ]
+                  parameters:
+                    commandCallTimeout: 1800
+                    artifacts:
+                      - url: "file://{$.chefAttrs[*][0].atg.ears.production}"
+                        name: ATGProduction
+                        targets: [ ATGProduction ]
+                        library: "false"
+                      - url: "file://{$.chefAttrs[*][0].atg.ears.publishing}"
+                        name: ATGPublishing
+                        targets: [ ATGPublishing ]
+                        library: "false"
+              - promoteContent:
+                  action: chefsolo
+                  precedingPhases: [ deployAtg ]
+                  parameters:
+                    roles: [ default ]
+                    recipeUrl: "{$.recipe-url}"
+                    runList:
+                      - recipe[atg::promote_content_crs]
+                    jattrs:
+                      weblogic: "{$.env.weblogic.wl-jattrs}"
+                      atg:
+                        password: "{$.atg-password}"
+            return:
+              atg_creds:
+                value: "{$.atg_creds}"
+              atgprod_creds:
+                value: "{$.atgprod_creds}"
+              switcha_creds:
+                value: "{$.switcha_creds}"
+              switchb_creds:
+                value: "{$.switchb_creds}"
+              atg_store_url:
+                value: "http://{$.env.weblogic.wl-host}:7003/crs/storeus"
+              bcc_url:
+                value: "http://{$.env.weblogic.wl-host}:7103/atg/bcc"
+              dynadmin_url:
+                value: "http://{$.env.weblogic.wl-host}:7003/dyn/admin"
+              endeca_url:
+                value: "http://{$.env.weblogic.wl-host}:8006/"
+                
+          destroy:
+            steps:
+              - delete-user-0:
+                  action: oracledb.delete-user
+                  parameters:
+                    creds: "{$.atg_creds}"
+                    commandCallTimeout: 600
+              - delete-user-1:
+                  action: oracledb.delete-user
+                  parameters:
+                    creds: "{$.atgprod_creds}"
+                    commandCallTimeout: 600
+              - delete-user-2:
+                  action: oracledb.delete-user
+                  parameters:
+                    creds: "{$.switcha_creds}"
+                    commandCallTimeout: 600
+              - delete-user-3:
+                  action: oracledb.delete-user
+                  parameters:
+                    creds: "{$.switchb_creds}"
+                    commandCallTimeout: 600
+
+          deploy-production:
+            steps:
+              - deployProduction:
+                  action: weblogic.deploy
+                  parameters:
+                    commandCallTimeout: 1800
+                    artifacts:
+                      - url: "{$.atg-artifact-production}"
+                        name: ATGProduction
+                        targets: [ ATGProduction ]
+                        library: "false"
+          
+          deploy-publishing:
+            steps:
+              - deployPublishing:
+                  action: weblogic.deploy
+                  parameters:
+                    commandCallTimeout: 1800
+                    artifacts:
+                      - url: "{$.atg-artifact-publishing}"
+                        name: ATGPublishing
+                        targets: [ ATGPublishing ]
+                        library: "false"
+                    
+    endeca:
+      type: workflow.Instance
+      interfaces:
+        input:
+          recipe-url: configuration(string)
+        props:
+          oracle_endeca_install: consume-signal(map<string, object>)
+        weblogic:
+          wl-host: consume-signal(string)
+          wl-image: consume-signal(map<string,object>)
+        result:
+          endeca-installed: publish-signal(string)
+      required: [ props, weblogic ]
+      configuration:
+        configuration.workflows:
+          launch:
+            steps:
+              - getSignals:
+                  action: getSignals
+                  output:
+                    env: result
+              - provision:
+                  action: provisionVms
+                  precedingPhases: [ getSignals ]
+                  parameters:
+                    hardwareId: ""
+                    staticIps: [ "{$.env.weblogic.wl-host}" ]
+                    vmIdentity: "{$.env.weblogic.wl-image.user}"
+                    roleName: default
+              - installEndeca:
+                  action: chefsolo
+                  precedingPhases: [ provision ]
+                  parameters:
+                    roles: [ default ]
+                    recipeUrl: "{$.recipe-url}"
+                    runList:
+                      - recipe[endeca::guidedsearch]
+                    jattrs:
+                      endeca:
+                        install: "{$.env.props.oracle_endeca_install}"
+            return:
+              endeca-installed:
+                value: "true"
+
+    weblogic:
+      type: reference.Submodule
+      configuration:
+        __locator.application-id: "WebLogic"
+      interfaces:
+        weblogic:
+          wl-host:        { type: publish-signal(string), name: "WebLogic host"            }
+          wl-image:       { type: "publish-signal(map<string,object>)", name: "WebLogic AMI" }
+          wl-jattrs:      { type: "publish-signal(map<string,object>)", name: "WebLogic attrs" }
+          wl-admin-port:  { type: publish-signal(string), name: "WebLogic console port"    }
+          wl-console-url: { type: publish-signal(string), name: "WebLogic console"         }
+          wl-domain:      { type: publish-signal(string), name: "WebLogic domain"          }
+          wl-password:    { type: publish-signal(string), name: "WebLogic password"        }
+          deploy: receive-command(list<map<string, object>> artifacts)
+    database:
+      type: reference.Submodule
+      configuration:
+        __locator.application-id: "Oracle DB"
+      interfaces:
+        oracledb:
+          db-host: { type: publish-signal(string), name: "Database Listener IP" }
+          db-port: { type: publish-signal(int), name: "Database Listener port" }
+          db-sid: { type: publish-signal(string), name: "Database SID" }
+          create-user: receive-command(map<string, object> creds => map<string, object> creds)
+          delete-user: receive-command(map<string, object> creds)
+          file-query: receive-command(map<string, object> creds, list<string> url)
+          sql-query: receive-command(map<string, object> creds, list<string> code)
+          impdp: receive-command(string dmp-url, string dmp-params)
+
