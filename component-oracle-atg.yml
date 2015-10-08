@@ -84,6 +84,9 @@ application:
 
       required: [ props, weblogic, endeca, oracledb ]
       configuration:
+        configuration.propagateStatus:
+          - deploy-production
+          - deploy-publishing
         configuration.triggers:
           input.atg-artifact-production: deploy-production
           input.atg-artifact-publishing: deploy-publishing
