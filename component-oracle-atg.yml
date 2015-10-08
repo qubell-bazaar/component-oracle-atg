@@ -232,6 +232,7 @@ application:
                       - recipe[atg::assemble_production_ear]
                       - recipe[atg::assemble_publishing_ear]
                     jattrs:
+                      weblogic: "{$.env.weblogic.wl-jattrs}"
                       atg:
                         servers:
                           production:
@@ -303,23 +304,42 @@ application:
                 
           destroy:
             steps:
+              - getSignals:
+                  action: getSignals
+                  output:
+                    env: result
+              - shutdownAtg:
+                  action: chefsolo
+                  precedingPhases: [ getSignals ]
+                  parameters:
+                    roles: [ default ]
+                    recipeUrl: "{$.recipe-url}"
+                    runList:
+                      - recipe[atg::shutdown_production_server]
+                      - recipe[atg::shutdown_publishing_server]
+                    jattrs:
+                      weblogic: "{$.env.weblogic.wl-jattrs}"
               - delete-user-0:
                   action: oracledb.delete-user
+                  precedingPhases: [ shutdownAtg ]
                   parameters:
                     creds: "{$.atg_creds}"
                     commandCallTimeout: 600
               - delete-user-1:
                   action: oracledb.delete-user
+                  precedingPhases: [ shutdownAtg ]
                   parameters:
                     creds: "{$.atgprod_creds}"
                     commandCallTimeout: 600
               - delete-user-2:
                   action: oracledb.delete-user
+                  precedingPhases: [ shutdownAtg ]
                   parameters:
                     creds: "{$.switcha_creds}"
                     commandCallTimeout: 600
               - delete-user-3:
                   action: oracledb.delete-user
+                  precedingPhases: [ shutdownAtg ]
                   parameters:
                     creds: "{$.switchb_creds}"
                     commandCallTimeout: 600
