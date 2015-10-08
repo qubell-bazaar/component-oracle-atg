@@ -3,7 +3,7 @@ kit:
   link: https://github.com/qubell-bazaar/component-oracle-atg
   applications:
     - name: "ATG"
-      manifest: https://raw.github.com/qubell-bazaar/component-oracle-atg/1.0-43p/component-oracle-atg.yml
+      manifest: https://raw.github.com/qubell-bazaar/component-oracle-atg/1.1-43p/component-oracle-atg.yml
     - name: "WebLogic"
       manifest: https://raw.github.com/qubell-bazaar/component-oracle-weblogic/2.0-43p/component-oracle-weblogic.yml
     - name: "Oracle DB"

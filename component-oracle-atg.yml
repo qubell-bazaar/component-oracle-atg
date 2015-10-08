@@ -1,6 +1,6 @@
 application:
   configuration:
-    input.recipe-url: "https://qubell-starter-kit-artifacts.s3.amazonaws.com/qubell-bazaar/component-oracle-atg-cookbooks-stable-99999.tar.gz"
+    input.recipe-url: "https://qubell-starter-kit-artifacts.s3.amazonaws.com/qubell-bazaar/component-oracle-atg-cookbooks-stable-0f07024.tar.gz"
     input.atg-password: "123QweAsd"
     input.atg-artifact-production: ""
     input.atg-artifact-publishing: ""

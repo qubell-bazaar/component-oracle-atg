@@ -1,12 +1,12 @@
 Oracle ATG Commerce Reference Store
 =====
 
-Version 1.0-43p
+Version 1.1-43p
 -------------
 
 Installs and configures Oracle ATG Commerce Reference Store
 
-[![Install](https://raw.github.com/qubell-bazaar/component-skeleton/master/img/install.png)](https://express.tonomi.com/applications/upload?metadataUrl=https://raw.github.com/qubell-bazaar/component-oracle-atg/1.0-43p/meta.yml)
+[![Install](https://raw.github.com/qubell-bazaar/component-skeleton/master/img/install.png)](https://express.tonomi.com/applications/upload?metadataUrl=https://raw.github.com/qubell-bazaar/component-oracle-atg/1.1-43p/meta.yml)
 
 Features
 --------
